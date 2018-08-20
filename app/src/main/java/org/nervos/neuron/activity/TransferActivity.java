@@ -89,6 +89,7 @@ public class TransferActivity extends NBaseActivity {
     private double mPrice = 0.0f, mBalance;
     private CurrencyItem currencyItem;
     private TitleBar titleBar;
+    private double mFee;
 
     @Override
     protected int getContentLayout() {
@@ -149,10 +150,12 @@ public class TransferActivity extends NBaseActivity {
             public void onCompleted() {
 
             }
+
             @Override
             public void onError(Throwable e) {
 
             }
+
             @Override
             public void onNext(Double balance) {
                 mBalance = balance;
@@ -170,12 +173,14 @@ public class TransferActivity extends NBaseActivity {
             public void onCompleted() {
 
             }
+
             @Override
             public void onError(Throwable e) {
                 e.printStackTrace();
                 Toast.makeText(mActivity, e.getMessage(), Toast.LENGTH_SHORT).show();
                 dismissProgressCircle();
             }
+
             @Override
             public void onNext(BigInteger gasPrice) {
                 dismissProgressCircle();
@@ -194,26 +199,27 @@ public class TransferActivity extends NBaseActivity {
     private void initPrice() {
         currencyItem = CurrencyUtil.getCurrencyItem(mActivity);
         TokenService.getCurrency(tokenItem.symbol, currencyItem.getName())
-            .subscribe(new Subscriber<String>() {
-                @Override
-                public void onCompleted() {
-                }
-                @Override
-                public void onError(Throwable e) {
-                    e.printStackTrace();
-                }
+                .subscribe(new Subscriber<String>() {
+                    @Override
+                    public void onCompleted() {
+                    }
 
-                @Override
-                public void onNext(String price) {
-                    if (TextUtils.isEmpty(price)) return;
-                    try {
-                        mPrice = Double.parseDouble(price);
-                        initFeeText();
-                    } catch (NumberFormatException e) {
+                    @Override
+                    public void onError(Throwable e) {
                         e.printStackTrace();
                     }
-                }
-            });
+
+                    @Override
+                    public void onNext(String price) {
+                        if (TextUtils.isEmpty(price)) return;
+                        try {
+                            mPrice = Double.parseDouble(price);
+                            initFeeText();
+                        } catch (NumberFormatException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
     }
 
 
@@ -221,6 +227,7 @@ public class TransferActivity extends NBaseActivity {
     private void initFeeText() {
         double fee = NumberUtil.getEthFromWei(mGas);
         if (fee > 0) {
+            mFee = NumberUtil.getEthFromWei(mGas);
             feeSeekText.setText(NumberUtil.getDecimal8ENotation(fee) + getFeeTokenUnit());
             if (mPrice > 0 && currencyItem != null) {
                 feeValueText.setText(feeSeekText.getText() + " = " +
@@ -236,9 +243,8 @@ public class TransferActivity extends NBaseActivity {
                 ConstUtil.QUOTA_TOKEN : ConstUtil.QUOTA_ERC20;
         mQuotaUnit = ConstUtil.QUOTA_TOKEN.divide(BigInteger.valueOf(DEFAULT_QUOTA_SEEK));
         feeSeekBar.setProgress(mQuota.divide(mQuotaUnit).intValue());
-
-        feeSeekText.setText(NumberUtil.getDecimal8ENotation(
-                NumberUtil.getEthFromWei(mQuota)) + getFeeTokenUnit());
+        mFee = NumberUtil.getEthFromWei(mQuota);
+        feeSeekText.setText(NumberUtil.getDecimal8ENotation(mFee) + getFeeTokenUnit());
         feeValueText.setText(feeSeekText.getText());
     }
 
@@ -268,6 +274,9 @@ public class TransferActivity extends NBaseActivity {
             } else if (mBalance < Double.parseDouble(transferValueEdit.getText().toString().trim())) {
                 Toast.makeText(mActivity, String.format(getString(R.string.balance_not_enough),
                         tokenItem.symbol), Toast.LENGTH_SHORT).show();
+            } else if (mBalance < mFee) {
+                Toast.makeText(mActivity, String.format(getString(R.string.balance_not_enough_fee),
+                        tokenItem.symbol), Toast.LENGTH_SHORT).show();
             } else {
                 confirmDialog = new BottomSheetDialog(mActivity);
                 confirmDialog.setCancelable(false);
@@ -288,15 +297,17 @@ public class TransferActivity extends NBaseActivity {
                     initFeeText();
                 } else {
                     mQuota = mQuotaUnit.multiply(BigInteger.valueOf(progress));
-                    feeSeekText.setText(NumberUtil.getDecimal8ENotation(
-                            NumberUtil.getEthFromWei(mQuota)) + getFeeTokenUnit());
+                    mFee = NumberUtil.getEthFromWei(mQuota);
+                    feeSeekText.setText(NumberUtil.getDecimal8ENotation(mFee) + getFeeTokenUnit());
                     feeValueText.setText(feeSeekText.getText());
                 }
             }
+
             @Override
             public void onStartTrackingTouch(SeekBar seekBar) {
 
             }
+
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
 
@@ -404,7 +415,7 @@ public class TransferActivity extends NBaseActivity {
             return " ETH";
         } else {
             ChainItem chainItem = DBChainUtil.getChain(mActivity, tokenItem.chainId);
-            return chainItem == null? "" : " " + chainItem.tokenSymbol;
+            return chainItem == null ? "" : " " + chainItem.tokenSymbol;
         }
     }
 
@@ -413,10 +424,11 @@ public class TransferActivity extends NBaseActivity {
         gasEditLayout.setVisibility(View.VISIBLE);
         quotaEditLayout.setVisibility(View.GONE);
         if (isGasLimitOk && isGasPriceOk) {
-            feeValueText.setText(
-                    NumberUtil.getEthFromWei(mGasPrice.multiply(mGasLimit)) + getFeeTokenUnit());
+            mFee = NumberUtil.getEthFromWei(mGasPrice.multiply(mGasLimit));
+            feeValueText.setText(mFee + getFeeTokenUnit());
         } else {
-            feeValueText.setText("0");
+            mFee = 0;
+            feeValueText.setText(mFee + "");
         }
     }
 
@@ -426,9 +438,11 @@ public class TransferActivity extends NBaseActivity {
         gasEditLayout.setVisibility(View.GONE);
         quotaEditLayout.setVisibility(View.VISIBLE);
         if (!TextUtils.isEmpty(customQuotaEdit.getText())) {
-            feeValueText.setText(NumberUtil.getEthFromWei(mQuota) + getFeeTokenUnit());
+            mFee = NumberUtil.getEthFromWei(mQuota);
+            feeValueText.setText(mFee + getFeeTokenUnit());
         } else {
-            feeValueText.setText("0");
+            mFee = 0;
+            feeValueText.setText(mFee + "");
         }
     }
 
@@ -531,6 +545,7 @@ public class TransferActivity extends NBaseActivity {
                     @Override
                     public void onCompleted() {
                     }
+
                     @Override
                     public void onError(Throwable e) {
                         e.printStackTrace();
